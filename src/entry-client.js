@@ -1,14 +1,22 @@
 import 'babel-polyfill';
 import React from 'react';
 import { hydrate } from 'react-dom';
+import { Provider } from 'react-redux';
 import { match, Router, browserHistory as history, applyRouterMiddleware } from 'react-router';
 import { useScroll } from 'react-router-scroll';
 import nprogress from 'nprogress';
 import { AppContainer } from 'react-hot-loader';
 import { buildRoutes } from './App';
+import buildStore from './shared/state/buildStore';
 
 const isDev = process.env.NODE_ENV === 'development';
-const { internalServerError } = window.__ISOMORPHIC_STATE__ || {};
+const { reduxPreloadedState, internalServerError } = window.__ISOMORPHIC_STATE__ || {};
+// Build redux store
+const store = buildStore(history, reduxPreloadedState);
+// Build our routes
+const routes = buildRoutes();
+// Set location to /internal-error if we had an internal server error
+const location = internalServerError ? '/internal-error' : undefined;
 
 // Allow the isomorphic state to be garbage-collected on non-dev environments
 !isDev && delete window.__ISOMORPHIC_STATE__;
@@ -24,22 +32,19 @@ history.listen((location) => {
 // Configure nprogress, see: https://github.com/rstacruz/nprogress
 nprogress.configure({ minimum: 0.15, showSpinner: false, speed: 500 });
 
-// Build our routes
-const routes = buildRoutes();
-// Set location to /internal-error if we had an internal server error
-const location = internalServerError ? '/internal-error' : undefined;
-
 // Render our app!
 // Need to use match() because of async routes, see https://github.com/ReactTraining/react-router/blob/master/docs/guides/ServerRendering.md#async-routes
 match({ history, routes, location }, (error, redirectLocation, renderProps) => {
     hydrate(
-        <AppContainer>
-            <Router
-                { ...renderProps }
-                history={ history }
-                routes={ routes }
-                render={ applyRouterMiddleware(useScroll()) } />
-        </AppContainer>,
+        <Provider store={ store }>
+            <AppContainer>
+                <Router
+                    { ...renderProps }
+                    history={ history }
+                    routes={ routes }
+                    render={ applyRouterMiddleware(useScroll()) } />
+            </AppContainer>
+        </Provider>,
         document.getElementById('root'),
         () => {
             // Remove server-side rendered CSS when developing, otherwise CSS styles would be duplicated
@@ -60,10 +65,12 @@ if (isDev && module.hot) {
 
         hydrate(
             <AppContainer>
-                <Router
-                    history={ history }
-                    routes={ routes }
-                    render={ applyRouterMiddleware(useScroll()) } />
+                <Provider store={ store }>
+                    <Router
+                        history={ history }
+                        routes={ routes }
+                        render={ applyRouterMiddleware(useScroll()) } />
+                </Provider>
             </AppContainer>,
             document.getElementById('root'),
         );
